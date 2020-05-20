@@ -174,6 +174,7 @@ int main(int argc, char* argv[])
     char* rd_buf;
     char* target_file;
     struct aiocb* reqs;
+    struct stat st;
     size_t num_reqs = 0;
     int rc;
 
@@ -267,13 +268,13 @@ int main(int argc, char* argv[])
 
     // stat file pre-laminate
     timer_start_barrier(cfg, &time_stat_pre);
-    stat_file(cfg, target_file);
+    test_stat_file(cfg, target_file, &st);
     timer_stop_barrier(cfg, &time_stat_pre);
     test_print_verbose_once(cfg, "DEBUG: finished stat pre");
 
     // stat file pre-laminate (again)
     timer_start_barrier(cfg, &time_stat_pre2);
-    stat_file(cfg, target_file);
+    test_stat_file(cfg, target_file, &st);
     timer_stop_barrier(cfg, &time_stat_pre2);
     test_print_verbose_once(cfg, "DEBUG: finished stat pre2");
 
@@ -288,7 +289,7 @@ int main(int argc, char* argv[])
 
     // stat file post-laminate
     timer_start_barrier(cfg, &time_stat_post);
-    stat_file(cfg, target_file);
+    test_stat_file(cfg, target_file, &st);
     timer_stop_barrier(cfg, &time_stat_post);
     test_print_verbose_once(cfg, "DEBUG: finished stat post");
 

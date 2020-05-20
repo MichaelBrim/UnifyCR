@@ -129,12 +129,12 @@ int dd_cmd(test_cfg* cfg, char* infile, char* outfile, unsigned long bs,
  * C clone of the 'test' command.  Only supports file checks like
  * "test -f $file" or "test -d $dir" for now.
  */
-int test_cmd(char* expression, char* path)
+int test_cmd(test_cfg* cfg, char* expression, char* path)
 {
     struct stat sb;
     int ret;
 
-    ret = stat(path, &sb);
+    ret = test_stat_file(cfg, path, &sb);
     /*
      * We're stat'ing a file/dir which may or may not exist.  Clear errno so
      * that we don't pollute future test_print() calls with bogus errors.
@@ -179,7 +179,7 @@ char* mktemp_cmd(test_cfg* cfg, char* tmpdir)
         tmpdir = "/tmp";
     }
 
-    if (!test_cmd("-d", tmpdir)) {
+    if (!test_cmd(cfg, "-d", tmpdir)) {
         test_print(cfg, "%s dir does not exists", tmpdir);
         return NULL;
     }
@@ -217,7 +217,7 @@ char* mktemp_cmd(test_cfg* cfg, char* tmpdir)
         }
 
     /* Loop until we've generated a filename that doesn't already exist */
-    } while (test_cmd("-f", tmpfile));
+    } while (test_cmd(cfg, "-f", tmpfile));
 
     /*
      * Success, we've generated a tmpfile name that doesn't already exist.
@@ -238,9 +238,9 @@ char* mktemp_cmd(test_cfg* cfg, char* tmpdir)
 long du_cmd(test_cfg* cfg, char* filename, int apparent_size)
 {
     struct stat sb;
-    if (stat(filename, &sb) == -1) {
-        test_print(cfg, "Error stat");
-        return -1;
+    int rc = test_stat_file(cfg, filename, &sb);
+    if (rc) {
+        return rc;
     }
 
     if (apparent_size) {
@@ -270,17 +270,20 @@ int sync_cmd(test_cfg* cfg, char* filename)
 int stat_cmd(test_cfg* cfg, char* filename)
 {
     struct stat sb;
-    int rc;
+    int rc = test_stat_file(cfg, filename, &sb);
+    if (rc) {
+        return rc;
+    }
+    print_stat_info(cfg, filename, &sb);
+    return 0;
+}
+
+void print_stat_info(test_cfg* cfg, char* filename, struct stat* st)
+{
     const char* typestr;
     char* tmp;
 
-    rc = stat(filename, &sb);
-    if (rc) {
-        test_print(cfg, "Error stating %s: %s", filename, strerror(rc));
-        return rc;
-    }
-
-    switch (sb.st_mode & S_IFMT) {
+    switch (st->st_mode & S_IFMT) {
     case S_IFREG:
         typestr = "regular file";
         break;
@@ -313,36 +316,37 @@ int stat_cmd(test_cfg* cfg, char* filename)
     free(tmp);
 
     test_print(cfg, "Device containing i-node: major=%ld   minor=%ld",
-           (long) major(sb.st_dev), (long) minor(sb.st_dev));
+               (long) major(st->st_dev), (long) minor(st->st_dev));
 
-    test_print(cfg, "I-node number:            %ld", (long) sb.st_ino);
+    test_print(cfg, "I-node number:            %ld", (long) st->st_ino);
 
     test_print(cfg, "Mode:                     %lo",
-           (unsigned long) sb.st_mode);
+               (unsigned long) st->st_mode);
 
-    if (sb.st_mode & (S_ISUID | S_ISGID | S_ISVTX)) {
+    if (st->st_mode & (S_ISUID | S_ISGID | S_ISVTX)) {
         test_print(cfg, "    special bits set:     %s%s%s",
-               (sb.st_mode & S_ISUID) ? "set-UID " : "",
-               (sb.st_mode & S_ISGID) ? "set-GID " : "",
-               (sb.st_mode & S_ISVTX) ? "sticky " : "");
+                   ((st->st_mode & S_ISUID) ? "set-UID " : ""),
+                   ((st->st_mode & S_ISGID) ? "set-GID " : ""),
+                   ((st->st_mode & S_ISVTX) ? "sticky " : ""));
     }
 
-    test_print(cfg, "Number of (hard) links:   %ld", (long) sb.st_nlink);
+    test_print(cfg, "Number of (hard) links:   %ld", (long) st->st_nlink);
 
     test_print(cfg, "Ownership:                UID=%ld   GID=%ld",
-           (long) sb.st_uid, (long) sb.st_gid);
+               (long) st->st_uid, (long) st->st_gid);
 
-    if (S_ISCHR(sb.st_mode) || S_ISBLK(sb.st_mode)) {
+    if (S_ISCHR(st->st_mode) || S_ISBLK(st->st_mode)) {
         test_print(cfg, "Device number (st_rdev):  major=%ld; minor=%ld",
-               (long) major(sb.st_rdev), (long) minor(sb.st_rdev));
+                   (long) major(st->st_rdev), (long) minor(st->st_rdev));
     }
 
     test_print(cfg, "File size:                %lld bytes",
-        (long long) sb.st_size);
+               (long long) st->st_size);
     test_print(cfg, "Optimal I/O block size:   %ld bytes",
-        (long) sb.st_blksize);
-    test_print(cfg, "Blocks allocated:         %lld", (long long) sb.st_blocks);
-    test_print(cfg, "Last file access:         %s", ctime(&sb.st_atime));
-    test_print(cfg, "Last file modification:   %s", ctime(&sb.st_mtime));
-    test_print(cfg, "Last status change:       %s", ctime(&sb.st_ctime));
+               (long) st->st_blksize);
+    test_print(cfg, "Blocks allocated:         %lld",
+               (long long) st->st_blocks);
+    test_print(cfg, "Last file access:         %s", ctime(&st->st_atime));
+    test_print(cfg, "Last file modification:   %s", ctime(&st->st_mtime));
+    test_print(cfg, "Last status change:       %s", ctime(&st->st_ctime));
 }

@@ -1046,6 +1046,23 @@ int test_create_file(test_cfg* cfg, const char* filepath, int access)
     return 0;
 }
 
+/*
+ * stat the target file
+ */
+static inline
+int test_stat_file(test_cfg* cfg, const char* filepath, struct stat* st)
+{
+    if (NULL != st) {
+        memset(st, 0, sizeof(struct stat));
+    }
+    errno = 0;
+    int rc = stat(filepath, st);
+    if (-1 == rc) {
+        test_print(cfg, "ERROR: stat(%s) failed - %s",
+                   filepath, strerror(errno));
+    }
+    return rc;
+}
 
 /*
  * map a segment of an already open file
@@ -1211,10 +1228,11 @@ void test_fini(test_cfg* cfg)
  */
 int dd_cmd(test_cfg* cfg, char* infile, char* outfile, unsigned long bs,
     unsigned long count, unsigned long seek);
-int test_cmd(char* expression, char* path);
+int test_cmd(test_cfg* cfg, char* expression, char* path);
 char* mktemp_cmd(test_cfg* cfg, char* tmpdir);
 long du_cmd(test_cfg* cfg, char* filename, int apparent_size);
 int sync_cmd(test_cfg* cfg, char* filename);
 int stat_cmd(test_cfg* cfg, char* filename);
+void print_stat_info(test_cfg* cfg, char* filename, struct stat* st);
 
 #endif /* UNIFYFS_TEST_UTIL_H */
