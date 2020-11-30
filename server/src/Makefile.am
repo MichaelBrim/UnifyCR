@@ -66,7 +66,7 @@ else # ! USE_MDHIM
 endif # USE_MDHIM
 
 
-unifyfsd_LDFLAGS = -static \
+unifyfsd_LDFLAGS = \
   $(OPT_LD_FLAGS) \
   $(MARGO_LDFLAGS)
 
@@ -84,8 +84,6 @@ AM_CPPFLAGS = \
 
 AM_CFLAGS = -Wall -Werror \
   $(OPT_C_FLAGS) \
-  $(MARGO_CFLAGS) \
-  $(MERCURY_CFLAGS) \
-  $(ARGOBOTS_CFLAGS)
+  $(MARGO_CFLAGS)
 
 CLEANFILES = $(bin_PROGRAMS)

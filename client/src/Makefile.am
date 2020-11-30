@@ -26,8 +26,6 @@ CLIENT_COMMON_CPPFLAGS = \
 CLIENT_COMMON_CFLAGS = \
   -Wall -Werror \
   $(MPI_CFLAGS) \
-  $(MERCURY_CFLAGS) \
-  $(ARGOBOTS_CFLAGS) \
   $(MARGO_CFLAGS)
 
 CLIENT_COMMON_LDFLAGS = \
@@ -41,6 +39,8 @@ CLIENT_COMMON_LIBADD = \
   -lrt -lpthread
 
 CLIENT_COMMON_SOURCES = \
+  client_read.c \
+  client_read.h \
   margo_client.c \
   margo_client.h \
   unifyfs.c \

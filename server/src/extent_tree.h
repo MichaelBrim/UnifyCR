@@ -15,9 +15,6 @@
 #ifndef __EXTENT_TREE_H__
 #define __EXTENT_TREE_H__
 
-#include <pthread.h>
-
-#include "tree.h"
 #include "unifyfs_global.h"
 
 struct extent_tree_node {
@@ -179,7 +176,9 @@ void extent_tree_dump(struct extent_tree* extent_tree)
 
     struct extent_tree_node* node = NULL;
     while ((node = extent_tree_iter(extent_tree, node))) {
-        LOGDBG("[%lu-%lu]", node->start, node->end);
+        LOGDBG("[%lu-%lu] @ %d(%d:%d) log offset %lu",
+               node->start, node->end, node->svr_rank,
+               node->app_id, node->cli_id, node->pos);
     }
 
     extent_tree_unlock(extent_tree);

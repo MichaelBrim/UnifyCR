@@ -86,7 +86,7 @@ script:
   - export DISTCHECK_CONFIGURE_FLAGS="--enable-fortran"
   - ./autogen.sh
   - ./configure $DISTCHECK_CONFIGURE_FLAGS || cat config.log
-  - make distcheck
+  - make distcheck V=1
   - ./scripts/checkpatch.sh || test "$TEST_CHECKPATCH_ALLOW_FAILURE" = yes
 
 after_failure:

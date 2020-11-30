@@ -63,8 +63,6 @@ libunifyfs_common_la_SOURCES = $(BASE_SRCS) $(OPT_SRCS)
 
 libunifyfs_common_la_CPPFLAGS = \
   $(OPT_FLAGS) \
-  $(MERCURY_CFLAGS) \
-  $(ARGOBOTS_CFLAGS) \
   $(MARGO_CFLAGS)
 
 libunifyfs_common_la_CPPFLAGS += -DSYSCONFDIR="$(sysconfdir)"
@@ -73,6 +71,8 @@ libunifyfs_common_la_LDFLAGS = \
   -version-info $(LIBUNIFYFS_LT_VERSION)
 
 libunifyfs_common_la_LIBADD = \
-  $(OPT_LIBS) -lm -lrt -lcrypto -lpthread
+  $(OPT_LIBS) \
+  $(MARGO_LIBS) \
+  -lm -lrt -lcrypto -lpthread
 
 AM_CFLAGS = -Wall -Werror -Wno-strict-aliasing
