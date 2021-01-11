@@ -133,6 +133,7 @@ sys_sysio_static_t_SOURCES = sys/sysio_suite.h \
 sys_sysio_static_t_CPPFLAGS = $(test_cppflags)
 sys_sysio_static_t_LDADD = $(test_wrap_ldadd)
 sys_sysio_static_t_LDFLAGS = $(test_wrap_ldflags)
+# sys_sysio_static_t_LIBTOOLFLAGS = --preserve-dup-deps
 
 std_stdio_gotcha_t_SOURCES = std/stdio_suite.h \
                              std/stdio_suite.c \
@@ -157,6 +158,7 @@ std_stdio_static_t_SOURCES = std/stdio_suite.h \
 std_stdio_static_t_CPPFLAGS = $(test_cppflags)
 std_stdio_static_t_LDADD = $(test_wrap_ldadd)
 std_stdio_static_t_LDFLAGS = $(test_wrap_ldflags)
+# std_stdio_static_t_LIBTOOLFLAGS = --preserve-dup-deps
 
 unifyfs_unmount_t_SOURCES = unifyfs_unmount.c
 unifyfs_unmount_t_CPPFLAGS = $(test_cppflags)

@@ -18,8 +18,23 @@ if HAVE_FORTRAN
 include_HEADERS += unifyfsf.h
 endif
 
+OPT_FLAGS =
+OPT_LIBS =
+OPT_SRCS =
+
+if USE_PMIX
+  OPT_FLAGS += -DUSE_PMIX
+  OPT_LIBS += -lpmix
+endif
+
+if USE_PMI2
+  OPT_FLAGS += -DUSE_PMI2
+  OPT_LIBS += -lpmi2
+endif
+
 CLIENT_COMMON_CPPFLAGS = \
   -Wall -Werror \
+  $(OPT_FLAGS) \
   -I$(top_builddir)/client \
   -I$(top_srcdir)/common/src
 
@@ -34,11 +49,54 @@ CLIENT_COMMON_LDFLAGS = \
   $(MARGO_LDFLAGS)
 
 CLIENT_COMMON_LIBADD = \
-  $(top_builddir)/common/src/libunifyfs_common.la \
+  $(OPT_LIBS) \
   $(MARGO_LIBS) \
-  -lrt -lpthread
+  -lm -lrt -lcrypto -lpthread
+
+BASE_SRCS = \
+  $(OPT_SRCS) \
+  ../../common/src/arraylist.h \
+  ../../common/src/arraylist.c \
+  ../../common/src/cm_enumerator.h \
+  ../../common/src/cm_enumerator.c \
+  ../../common/src/ini.h \
+  ../../common/src/ini.c \
+  ../../common/src/rm_enumerator.h \
+  ../../common/src/rm_enumerator.c \
+  ../../common/src/seg_tree.h \
+  ../../common/src/seg_tree.c \
+  ../../common/src/slotmap.h \
+  ../../common/src/slotmap.c \
+  ../../common/src/tinyexpr.h \
+  ../../common/src/tinyexpr.c \
+  ../../common/src/tree.h \
+  ../../common/src/unifyfs_const.h \
+  ../../common/src/unifyfs_configurator.h \
+  ../../common/src/unifyfs_configurator.c \
+  ../../common/src/unifyfs_keyval.h \
+  ../../common/src/unifyfs_keyval.c \
+  ../../common/src/unifyfs_log.h \
+  ../../common/src/unifyfs_log.c \
+  ../../common/src/unifyfs_logio.h \
+  ../../common/src/unifyfs_logio.c \
+  ../../common/src/unifyfs_meta.h \
+  ../../common/src/unifyfs_meta.c \
+  ../../common/src/unifyfs_misc.c \
+  ../../common/src/unifyfs_misc.h \
+  ../../common/src/unifyfs_rpc_util.h \
+  ../../common/src/unifyfs_rpc_util.c \
+  ../../common/src/unifyfs_rpc_types.h \
+  ../../common/src/unifyfs_client_rpcs.h \
+  ../../common/src/unifyfs_server_rpcs.h \
+  ../../common/src/unifyfs_rc.h \
+  ../../common/src/unifyfs_rc.c \
+  ../../common/src/unifyfs_shm.h \
+  ../../common/src/unifyfs_shm.c \
+  ../../common/src/unifyfs-stack.h \
+  ../../common/src/unifyfs-stack.c
 
 CLIENT_COMMON_SOURCES = \
+  $(BASE_SRCS) \
   client_read.c \
   client_read.h \
   margo_client.c \
