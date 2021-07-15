@@ -39,6 +39,7 @@
 
 #ifndef DISABLE_UNIFYFS
 # include <unifyfs.h>
+# include <unifyfs_api.h>
 #endif
 
 /* ---------- Common Types and Definitions ---------- */
@@ -132,6 +133,7 @@ typedef struct {
     int pre_wr_trunc;  /* truncate file before writing */
     int post_wr_trunc; /* truncate file after writing */
     int use_aio;    /* use asynchronous IO */
+    int use_api;    /* use UnifyFS library API */
     int use_lio;    /* use lio_listio instead of read/write */
     int use_mapio;  /* use mmap instead of read/write */
     int use_mpiio;  /* use MPI-IO instead of POSIX I/O */
@@ -156,12 +158,15 @@ typedef struct {
     size_t mapped_sz;  /* size of mapped extent */
     MPI_File mpifh;    /* MPI file handle (when use_mpiio) */
 
+#ifndef DISABLE_UNIFYFS
+    /* UnifyFS API info */
+    unifyfs_handle fshdl; /* file system client handle */
+    unifyfs_gfid   gfid;  /* global file id for target */
+#endif
+
     /* MPI info */
     int rank;
     int n_ranks;
-
-    /* UnifyFS info */
-    int app_id;
 } test_cfg;
 
 static inline
@@ -175,6 +180,12 @@ void test_config_init(test_cfg* cfg)
 
     // set everything to 0/NULL
     memset(cfg, 0, sizeof(test_cfg));
+
+#ifndef DISABLE_UNIFYFS
+    // invalidate UnifyFS API state
+    cfg->fshdl = UNIFYFS_INVALID_HANDLE;
+    cfg->gfid  = UNIFYFS_INVALID_GFID;
+#endif
 
     // N-to-1 UnifyFS by default
     cfg->use_mpi = 1;
@@ -223,6 +234,7 @@ void test_config_print(test_cfg* cfg)
     fprintf(fp, "\t pre_trunc   = %d\n", cfg->pre_wr_trunc);
     fprintf(fp, "\t post_trunc  = %d\n", cfg->post_wr_trunc);
     fprintf(fp, "\t use_aio     = %d\n", cfg->use_aio);
+    fprintf(fp, "\t use_api     = %d\n", cfg->use_api);
     fprintf(fp, "\t use_lio     = %d\n", cfg->use_lio);
     fprintf(fp, "\t use_mapio   = %d\n", cfg->use_mapio);
     fprintf(fp, "\t use_mpiio   = %d\n", cfg->use_mpiio);
@@ -241,7 +253,6 @@ void test_config_print(test_cfg* cfg)
     fprintf(fp, "\t mountpt     = %s\n", cfg->mountpt);
 
     fprintf(fp, "\n-- MPI Info --\n");
-    fprintf(fp, "\t app_id      = %d\n", cfg->app_id);
     fprintf(fp, "\t rank        = %d\n", cfg->rank);
     fprintf(fp, "\t n_ranks     = %d\n", cfg->n_ranks);
     fprintf(fp, "\n==========================\n\n");
@@ -493,10 +504,9 @@ int test_is_static(const char* program)
 
 // common options for all tests
 
-static const char* test_short_opts = "a:Ab:c:df:hkLm:MNn:o:p:PrSt:T:UvVx";
+static const char* test_short_opts = "Ab:c:df:hklLm:Mn:No:p:PrSt:T:UvVx";
 
 static const struct option test_long_opts[] = {
-    { "appid", 1, 0, 'a' },
     { "aio", 0, 0, 'A' },
     { "blocksize", 1, 0, 'b' },
     { "chunksize", 1, 0, 'c' },
@@ -504,6 +514,7 @@ static const struct option test_long_opts[] = {
     { "file", 1, 0, 'f' },
     { "help", 0, 0, 'h' },
     { "check", 0, 0, 'k' },
+    { "library-api", 0, 0, 'l' },
     { "listio", 0, 0, 'L' },
     { "mount", 1, 0, 'm' },
     { "mpiio", 0, 0, 'M' },
@@ -528,8 +539,6 @@ static const char* test_usage_str =
     "Usage: %s [options...]\n"
     "\n"
     "Available options:\n"
-    " -a, --appid=<id>                 use given application id\n"
-    "                                  (default: 0)\n"
     " -A, --aio                        use asynchronous I/O instead of read|write\n"
     "                                  (default: off)\n"
     " -b, --blocksize=<bytes>          I/O block size\n"
@@ -541,6 +550,8 @@ static const char* test_usage_str =
     " -f, --file=<filename>            target file name (or path) under mountpoint\n"
     "                                  (default: 'testfile')\n"
     " -k, --check                      check data contents upon read\n"
+    "                                  (default: off)\n"
+    " -l, --library-api                use UnifyFS library API instead of POSIX I/O\n"
     "                                  (default: off)\n"
     " -L, --listio                     use lio_listio instead of read|write\n"
     "                                  (default: off)\n"
@@ -597,10 +608,6 @@ int test_process_argv(test_cfg* cfg,
     while ((ch = getopt_long(argc, argv, test_short_opts,
                              test_long_opts, NULL)) != -1) {
         switch (ch) {
-        case 'a':
-            cfg->app_id = atoi(optarg);
-            break;
-
         case 'A':
             cfg->use_aio = 1;
             break;
@@ -623,6 +630,10 @@ int test_process_argv(test_cfg* cfg,
 
         case 'k':
             cfg->io_check = 1;
+            break;
+
+        case 'l':
+            cfg->use_api = 1;
             break;
 
         case 'L':
@@ -748,12 +759,27 @@ int test_process_argv(test_cfg* cfg,
         }
     }
     if (cfg->use_aio &&
-        (cfg->use_mapio || cfg->use_mpiio || cfg->use_prdwr
+        (cfg->use_api || cfg->use_mapio || cfg->use_mpiio || cfg->use_prdwr
          || cfg->use_stdio || cfg->use_vecio)) {
         test_print_once(cfg,
             "USAGE ERROR: --aio incompatible with "
-            "[--mapio, --mpiio, --prdwr, --stdio, --vecio]");
+            "[--library-api, --mapio, --mpiio, --prdwr, --stdio, --vecio]");
         exit(-1);
+    }
+    if (cfg->use_api) {
+        if (cfg->use_lio || cfg->use_mapio || cfg->use_mpiio || cfg->use_prdwr
+            || cfg->use_stdio || cfg->use_vecio) {
+            test_print_once(cfg,
+                "USAGE ERROR: --library-api incompatible with "
+                "[--listio, --mapio, --mpiio, --prdwr, --stdio, --vecio]");
+            exit(-1);
+        }
+        if (!cfg->use_unifyfs) {
+            test_print_once(cfg,
+                "USAGE ERROR: --library-api incompatible with "
+                "--disable-unifyfs");
+            exit(-1);
+        }
     }
     if (cfg->use_lio &&
         (cfg->use_mapio || cfg->use_mpiio || cfg->use_prdwr
@@ -1031,7 +1057,17 @@ int test_open_file(test_cfg* cfg, const char* filepath, int access)
 
     assert(NULL != cfg);
 
-    if (cfg->use_mpiio) {
+    if (cfg->use_api) {
+#ifndef DISABLE_UNIFYFS
+        unifyfs_rc rc = unifyfs_open(cfg->fshdl, access, filepath,
+                                     &(cfg->gfid));
+        if (UNIFYFS_SUCCESS != rc) {
+            test_print(cfg, "ERROR: unifyfs_open(%s) failed - %s",
+                       filepath, unifyfs_rc_enum_description(rc));
+            return -1;
+        }
+#endif
+    } else if (cfg->use_mpiio) {
         int amode = test_access_to_mpiio_mode(access);
         if (cfg->io_pattern == IO_PATTERN_N1) {
             MPI_CHECK(cfg, (MPI_File_open(MPI_COMM_WORLD, filepath, amode,
@@ -1070,6 +1106,13 @@ static inline
 int test_close_file(test_cfg* cfg)
 {
     assert(NULL != cfg);
+
+    if (cfg->use_api) {
+#ifndef DISABLE_UNIFYFS
+        cfg->gfid = UNIFYFS_INVALID_GFID;
+#endif
+        return 0;
+    }
 
     if (cfg->use_mpiio) {
         MPI_CHECK(cfg, (MPI_File_close(&cfg->mpifh)));
@@ -1116,11 +1159,19 @@ int test_remove_file(test_cfg* cfg, const char* filepath)
         return 0;
     }
 
-    /* POSIX I/O
-     *   N-to-1 - rank 0 deletes shared files
-     *   N-to-N - all ranks delete per-process files */
+    /* N-to-1 - rank 0 deletes shared files
+     * N-to-N - all ranks delete per-process files */
     if (cfg->rank == 0 || cfg->io_pattern == IO_PATTERN_NN) {
-        if (cfg->use_stdio) {
+        if (cfg->use_api) {
+#ifndef DISABLE_UNIFYFS
+            unifyfs_rc urc = unifyfs_remove(cfg->fshdl, filepath);
+            if (UNIFYFS_SUCCESS != urc) {
+                test_print(cfg, "ERROR: unifyfs_remove(%s) failed - %s",
+                           filepath, unifyfs_rc_enum_description(urc));
+                return -1;
+            }
+#endif
+        } else if (cfg->use_stdio) {
             rc = remove(filepath);
             if (rc) {
                 test_print(cfg, "ERROR: remove(%s) failed", filepath);
@@ -1151,6 +1202,7 @@ int test_create_file(test_cfg* cfg, const char* filepath, int access)
 
     assert(NULL != cfg);
 
+    /* MPI-IO */
     if (cfg->use_mpiio) {
         create_mode = test_access_to_mpiio_mode(access);
         create_mode |= MPI_MODE_CREATE;
@@ -1168,11 +1220,20 @@ int test_create_file(test_cfg* cfg, const char* filepath, int access)
         return 0;
     }
 
-    /* POSIX I/O
-     *   N-to-1 - rank 0 creates shared files
-     *   N-to-N - all ranks create per-process files */
+    /* N-to-1 - rank 0 creates shared files
+     * N-to-N - all ranks create per-process files */
     if (cfg->rank == 0 || cfg->io_pattern == IO_PATTERN_NN) {
-        if (cfg->use_stdio) {
+        if (cfg->use_api) {
+#ifndef DISABLE_UNIFYFS
+            unifyfs_rc urc = unifyfs_create(cfg->fshdl, 0, filepath,
+                                            &(cfg->gfid));
+            if (UNIFYFS_SUCCESS != urc) {
+                test_print(cfg, "ERROR: unifyfs_create(%s) failed - %s",
+                           filepath, unifyfs_rc_enum_description(urc));
+                return -1;
+            }
+#endif
+        } else if (cfg->use_stdio) {
             fmode = test_access_to_stdio_mode(access);
             fp = fopen(filepath, fmode);
             if (NULL == fp) {
@@ -1321,16 +1382,28 @@ int test_init(int argc, char** argv,
         test_config_print(cfg);
     }
 
-    if (cfg->use_unifyfs && !cfg->enable_mpi_mount) {
+    if (cfg->use_unifyfs) {
 #ifndef DISABLE_UNIFYFS
         if (cfg->debug) {
-            test_pause(cfg, "Before unifyfs_mount()");
+            test_pause(cfg, "Before mounting UnifyFS");
         }
-        rc = unifyfs_mount(cfg->mountpt, cfg->rank, cfg->n_ranks, cfg->app_id);
-        if (rc) {
-            test_print(cfg, "ERROR: unifyfs_mount() failed (rc=%d)", rc);
-            test_abort(cfg, rc);
-            return -1;
+        if (cfg->use_api) {
+            unifyfs_rc urc = unifyfs_initialize(cfg->mountpt, NULL, 0,
+                                                &(cfg->fshdl));
+            if (UNIFYFS_SUCCESS != urc) {
+                test_print(cfg, "ERROR: unifyfs_initialize(%s) failed (%s)",
+                           cfg->mountpt, unifyfs_rc_enum_description(urc));
+                test_abort(cfg, (int)urc);
+                return -1;
+            }
+        } else if (!cfg->enable_mpi_mount) {
+            rc = unifyfs_mount(cfg->mountpt, cfg->rank, cfg->n_ranks);
+            if (rc) {
+                test_print(cfg, "ERROR: unifyfs_mount(%s) failed (rc=%d)",
+                           cfg->mountpt, rc);
+                test_abort(cfg, rc);
+                return -1;
+            }
         }
 #endif
         test_barrier(cfg);
@@ -1356,11 +1429,20 @@ void test_fini(test_cfg* cfg)
 
     test_close_file(cfg);
 
-    if (cfg->use_unifyfs && !cfg->enable_mpi_mount) {
+    if (cfg->use_unifyfs) {
 #ifndef DISABLE_UNIFYFS
-        int rc = unifyfs_unmount();
-        if (rc) {
-            test_print(cfg, "ERROR: unifyfs_unmount() failed (rc=%d)", rc);
+        if (cfg->use_api) {
+            unifyfs_rc urc = unifyfs_finalize(cfg->fshdl);
+            if (UNIFYFS_SUCCESS != urc) {
+                test_print(cfg, "ERROR: unifyfs_finalize() failed - %s",
+                           unifyfs_rc_enum_description(urc));
+            }
+            cfg->fshdl = UNIFYFS_INVALID_HANDLE;
+        } else if (!cfg->enable_mpi_mount) {
+            int rc = unifyfs_unmount();
+            if (rc) {
+                test_print(cfg, "ERROR: unifyfs_unmount() failed (rc=%d)", rc);
+            }
         }
 #endif
     }
